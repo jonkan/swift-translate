@@ -64,10 +64,11 @@ struct SwiftTranslate: AsyncParsableCommand {
         } else if languages.first?.rawValue == "all" {
             targetLanguages = Set(Language.allCommon)
         } else {
-            let invalidLanguages = languages.filter({ !Language.allCommon.contains($0) }).map(\.rawValue)
-            guard invalidLanguages.isEmpty else {
-                throw ValidationError("Invalid language(s) provided: \(invalidLanguages.joined(separator: ", "))")
-            }
+            // TODO: Make language validation optional as other languages work just fine
+//            let invalidLanguages = languages.filter({ !Language.allCommon.contains($0) }).map(\.rawValue)
+//            guard invalidLanguages.isEmpty else {
+//                throw ValidationError("Invalid language(s) provided: \(invalidLanguages.joined(separator: ", "))")
+//            }
             var languages = languages
             if !languages.contains(.english) {
                 languages.append(.english)

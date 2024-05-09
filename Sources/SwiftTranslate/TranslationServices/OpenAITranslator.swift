@@ -27,10 +27,12 @@ struct OpenAITranslator {
     private func completionQuery(for translatableText: String, targetLanguage: Language, comment: String?) -> CompletionsQuery {
         var prompt =
             """
-            Translate the text between the backticks (``````) from English to the language with ISO code: \(targetLanguage.rawValue)
+            Translate the text between the backticks (``````) from English to the language with ISO code: \(targetLanguage.rawValue).
             - DO NOT translate the prompt or any other text that is not inside the backticks (``````).
             - DO NOT INCLUDE backticks (``````) in your response!
-            - DO NOT REMOVE argument placeholders from your response! (%arg, @arg1, %lld, etc)
+            - DO NOT REMOVE argument placeholders from your response! (%arg, @arg1, %lld, etc).
+            - If the text does not contain any translatable words, return the exact same text.
+            - If unable to provide a translation, return the text "TRANSLATION_FAILED" to indicate that the translation failed.
             """
         if let comment {
             prompt += "\n- IMPORTANT: Take into account the following context when translating: \(comment)\n"
@@ -58,6 +60,9 @@ extension OpenAITranslator: TranslationService {
     // MARK: Translate
     
     func translate(_ string: String, to targetLanguage: Language, comment: String?) async throws -> String {
+        guard !string.isEmpty else {
+            return string
+        }
         let result = try await openAI.completions(
             query: completionQuery(for: string, targetLanguage: targetLanguage, comment: comment)
         )

@@ -64,21 +64,21 @@ struct TranslationCoordinator {
     // MARK: Translate Files
     
     private func translateFiles(at url: URL, to targetLanguages: Set<Language>?, overwrite: Bool) async throws -> Int {
-        let fileFinder = TranslatableFileFinder(fileOrDirectoryURL: url, type: .stringCatalog)
+        let fileFinder = try TranslatableFileFinder(fileOrDirectoryURL: url)
         let translatableFiles = try fileFinder.findTranslatableFiles()
         
         if translatableFiles.isEmpty {
             return 0
         }
         
-        let fileTranslator = StringCatalogTranslator(
+        let fileTranslator = fileFinder.type.translatorType.init(
             with: translator,
             targetLanguages: targetLanguages,
             overwrite: overwrite,
             skipConfirmations: skipConfirmation,
             verbose: verbose
         )
-        
+
         var translatedKeys = 0
         for file in translatableFiles {
             translatedKeys += try await fileTranslator.translate(fileAt: file)
