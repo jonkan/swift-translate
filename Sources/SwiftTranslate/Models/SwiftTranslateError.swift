@@ -13,6 +13,11 @@ enum SwiftTranslateError: LocalizedError {
     case translationFailed
     case evaluationIsNotSupported
     case translationFailedLinting
+    case unhandledFileType
+    case fileNotFound(URL)
+    case fileAlreadyExists(URL)
+    case failedToParseLocale(String)
+    case failedToSaveTranslation(String)
 
     var errorDescription: String? {
         switch self {
@@ -30,6 +35,16 @@ enum SwiftTranslateError: LocalizedError {
             "Evaluation is not supported"
         case .translationFailedLinting:
             "Translation failed linting"
+        case .unhandledFileType:
+            "Unhandled file type"
+        case .fileNotFound(let url):
+            "File not found: \(url)"
+        case .fileAlreadyExists(let url):
+            "File already exists: \(url)"
+        case .failedToParseLocale(let string):
+            "Failed to parse locale: \(string)"
+        case .failedToSaveTranslation(let string):
+            "Failed to save translation: \(string)"
         }
     }
 

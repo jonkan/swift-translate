@@ -95,14 +95,14 @@ struct ActionCoordinator {
         overwrite: Bool,
         setNeedsReviewAfterTranslating: Bool
     ) async throws -> Int {
-        let fileFinder = TranslatableFileFinder(fileOrDirectoryURL: url, type: .stringCatalog)
+        let fileFinder = try TranslatableFileFinder(fileOrDirectoryURL: url)
         let translatableFiles = try fileFinder.findTranslatableFiles()
         
         if translatableFiles.isEmpty {
             return 0
         }
         
-        let fileTranslator = await StringCatalogTranslator(
+        let fileTranslator = fileFinder.type.translatorType.init(
             with: translator,
             targetLanguages: targetLanguages,
             overwrite: overwrite,

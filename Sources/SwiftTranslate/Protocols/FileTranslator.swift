@@ -13,5 +13,15 @@ protocol FileTranslator {
     var skipConfirmations: Bool { get }
     var verbose: Bool { get }
     
+    init(
+        with translator: TranslationService,
+        targetLanguages: Set<Language>?,
+        overwrite: Bool,
+        skipConfirmations: Bool,
+        setNeedsReviewAfterTranslating: Bool,
+        verbose: Bool,
+        numberOfConcurrentTasks: Int
+    )
+
     func translate(fileAt fileUrl: URL) async throws -> Int
 }

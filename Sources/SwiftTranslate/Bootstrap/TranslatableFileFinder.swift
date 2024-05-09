@@ -11,18 +11,36 @@ struct TranslatableFileFinder {
     
     enum FileType: String {
         case stringCatalog = "xcstrings"
+        case jsonSpecification = "json"
+
+        var translatorType: FileTranslator.Type {
+            switch self {
+            case .stringCatalog:
+                return StringCatalogTranslator.self
+            case .jsonSpecification:
+                return JSONSpecificationTranslator.self
+            }
+        }
     }
-    
+    let type: FileType
+
     // MARK: Private
     
     private let fileManager = FileManager.default
     private let fileOrDirectoryURL: URL
-    private let type: FileType
 
     // MARK: Lifecycle
 
     init(fileOrDirectoryURL: URL, type: FileType) {
         self.fileOrDirectoryURL = fileOrDirectoryURL
+        self.type = type
+    }
+
+    init(fileOrDirectoryURL: URL) throws {
+        self.fileOrDirectoryURL = fileOrDirectoryURL
+        guard let type = FileType(rawValue: fileOrDirectoryURL.pathExtension) else {
+            throw SwiftTranslateError.unhandledFileType
+        }
         self.type = type
     }
     

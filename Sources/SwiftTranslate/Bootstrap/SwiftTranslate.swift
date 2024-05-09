@@ -22,9 +22,5 @@ struct SwiftTranslate: AsyncParsableCommand {
         ]
     )
 
-    func run() async throws {
-
-    }
-
 }
 
