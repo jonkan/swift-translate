@@ -19,6 +19,7 @@ struct StringCatalogTranslator: FileTranslator {
     let verbose: Bool
 
     private let semaphore: AsyncSemaphore
+    private let linter: StringCatalogLinter
 
     // MARK: Lifecycle
     
@@ -38,6 +39,7 @@ struct StringCatalogTranslator: FileTranslator {
         self.setNeedsReviewAfterTranslating = setNeedsReviewAfterTranslating
         self.verbose = verbose
         self.semaphore = AsyncSemaphore(value: numberOfConcurrentTasks)
+        self.linter = StringCatalogLinter(verbose: false)
     }
     
     func translate(fileAt fileUrl: URL) async throws -> Int {
@@ -92,6 +94,7 @@ struct StringCatalogTranslator: FileTranslator {
                     await semaphore.wait()
                     let translation = await translate(
                         localizableString.sourceValue,
+                        in: catalog.sourceLanguage,
                         to: localizableString.targetLanguage,
                         comment: group.comment
                     )
@@ -122,6 +125,7 @@ struct StringCatalogTranslator: FileTranslator {
 
     private func translate(
         _ sourceValue: String,
+        in sourceLanguage: Language,
         to targetLanguage: Language,
         comment: String?
     ) async -> String? {
@@ -134,7 +138,15 @@ struct StringCatalogTranslator: FileTranslator {
                     to: targetLanguage,
                     comment: comment
                 )
-                if verbose {
+                let lintingPassed = linter.lint(
+                    source: sourceValue,
+                    sourceLanguage: sourceLanguage,
+                    translation: translatedString,
+                    language: targetLanguage
+                )
+                if !lintingPassed {
+                    throw SwiftTranslateError.translationFailedLinting
+                } else if verbose {
                     logTranslationResult(sourceValue, to: targetLanguage, translation: translatedString, comment: comment)
                 }
                 return translatedString

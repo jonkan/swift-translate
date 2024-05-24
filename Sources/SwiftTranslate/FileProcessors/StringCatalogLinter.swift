@@ -119,7 +119,8 @@ extension LintRule {
 
     static var allRules: [LintRule] = [
         .unbalancedWhitespace,
-        .specialCharactersNotInSource
+        .specialCharactersNotInSource,
+        .emptyTranslation
     ]
 
     static let unbalancedWhitespace = LintRule(
@@ -149,4 +150,14 @@ extension LintRule {
         }
         return .good
     }
+
+    static let emptyTranslation = LintRule(
+        name: "empty_translation"
+    ) { source, sourceLanguage, translation, language in
+        if translation.isEmpty && !source.isEmpty {
+            return .bad
+        }
+        return .good
+    }
+
 }

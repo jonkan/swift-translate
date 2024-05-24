@@ -12,6 +12,7 @@ enum SwiftTranslateError: LocalizedError {
     case failedToParseTranslationResponse(String)
     case translationFailed
     case evaluationIsNotSupported
+    case translationFailedLinting
 
     var errorDescription: String? {
         switch self {
@@ -27,6 +28,8 @@ enum SwiftTranslateError: LocalizedError {
             "Translation failed"
         case .evaluationIsNotSupported:
             "Evaluation is not supported"
+        case .translationFailedLinting:
+            "Translation failed linting"
         }
     }
 

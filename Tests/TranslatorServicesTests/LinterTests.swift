@@ -75,6 +75,15 @@ class LinterTests: XCTestCase {
         XCTAssertTrue(!passed)
     }
 
+    func testBadEmpty() {
+        let passed = lint(
+            source: "Something",
+            translation: "",
+            language: .swedish
+        )
+        XCTAssertTrue(!passed)
+    }
+
     // MARK: - Helpers
 
     private func lint(source: String, translation: String, language: Language) -> Bool {
