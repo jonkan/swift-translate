@@ -102,13 +102,14 @@ struct ActionCoordinator {
             return 0
         }
         
-        let fileTranslator = StringCatalogTranslator(
+        let fileTranslator = await StringCatalogTranslator(
             with: translator,
             targetLanguages: targetLanguages,
             overwrite: overwrite,
             skipConfirmations: skipConfirmation,
             setNeedsReviewAfterTranslating: setNeedsReviewAfterTranslating,
-            verbose: verbose
+            verbose: verbose,
+            numberOfConcurrentTasks: 10
         )
         
         var translatedKeys = 0
@@ -133,12 +134,13 @@ struct ActionCoordinator {
             throw SwiftTranslateError.evaluationIsNotSupported
         }
 
-        let evaluator = StringCatalogEvaluator(
+        let evaluator = await StringCatalogEvaluator(
             with: translator,
             languages: languages,
             overwrite: overwrite,
             skipConfirmations: skipConfirmation,
-            verbose: verbose
+            verbose: verbose,
+            numberOfConcurrentTasks: 10
         )
 
         var numberOfVerifiedStrings = 0

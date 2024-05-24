@@ -4,8 +4,9 @@
 
 import Foundation
 import SwiftStringCatalog
+import Semaphore
 
-
+@MainActor
 struct StringCatalogTranslator: FileTranslator {
     
     // MARK: Internal
@@ -16,7 +17,9 @@ struct StringCatalogTranslator: FileTranslator {
     let targetLanguages: Set<Language>?
     let service: TranslationService
     let verbose: Bool
-    
+
+    private let semaphore: AsyncSemaphore
+
     // MARK: Lifecycle
     
     init(
@@ -25,7 +28,8 @@ struct StringCatalogTranslator: FileTranslator {
         overwrite: Bool,
         skipConfirmations: Bool,
         setNeedsReviewAfterTranslating: Bool,
-        verbose: Bool
+        verbose: Bool,
+        numberOfConcurrentTasks: Int
     ) {
         self.skipConfirmations = skipConfirmations
         self.overwrite = overwrite
@@ -33,6 +37,7 @@ struct StringCatalogTranslator: FileTranslator {
         self.service = translator
         self.setNeedsReviewAfterTranslating = setNeedsReviewAfterTranslating
         self.verbose = verbose
+        self.semaphore = AsyncSemaphore(value: numberOfConcurrentTasks)
     }
     
     func translate(fileAt fileUrl: URL) async throws -> Int {
@@ -51,17 +56,17 @@ struct StringCatalogTranslator: FileTranslator {
             targetUrl = targetUrl.deletingPathExtension().appendingPathExtension("loc.xcstrings")
         }
 
-        var translatedStringsCount = 0
-        for key in catalog.allKeys {
-            try await translate(
-                key: key,
-                in: catalog,
-                translatedStringsCount: &translatedStringsCount,
-                savingPeriodicallyTo: targetUrl
-            )
-        }
+        let translatedStringsCount = try await withThrowingTaskGroup(of: Bool.self) { group in
+            for task in try translationTasks(for: catalog, savingTo: targetUrl) {
+                group.addTask { await task.value }
+            }
 
-        try catalog.write(to: targetUrl)
+            var count = 0
+            for try await result in group {
+                count += result ? 1 : 0
+            }
+            return count
+        }
 
         return translatedStringsCount
     }
@@ -72,67 +77,79 @@ struct StringCatalogTranslator: FileTranslator {
         Log.info("Found \(catalog.allKeys.count) keys targeting \(catalog.targetLanguages.count) languages for a total of \(catalog.localizableStringsCount) localizable strings")
         return catalog
     }
-    
-    private func translate(
-        key: String,
-        in catalog: StringCatalog,
-        translatedStringsCount: inout Int,
-        savingPeriodicallyTo fileURL: URL
-    ) async throws {
-        guard let localizableStringGroup = catalog.localizableStringGroups[key] else {
-            return
-        }
-        Log.info(newline: verbose ? .before : .none, "Translating key `\(key.truncatedRemovingNewlines(to: 64))` " + "[Comment: \(localizableStringGroup.comment ?? "n/a")]".dim)
-        
-        for localizableString in localizableStringGroup.strings {
-            let isSource = catalog.sourceLanguage == localizableString.targetLanguage
-            let targetLanguage = localizableString.targetLanguage
-            
-            if localizableString.state == .translated || isSource {
-                if verbose {
-                    let result = isSource 
-                        ? localizableString.sourceValue.truncatedRemovingNewlines(to: 64)
-                        : "[Already translated]".dim
-                    logTranslationResult(to: targetLanguage, result: result, isSource: isSource)
+
+    private func translationTasks(
+        for catalog: StringCatalog,
+        savingTo fileURL: URL? = nil
+    ) throws -> [Task<Bool, Never>] {
+        catalog.localizableStringGroups.flatMap { key, group in
+            group.strings.compactMap { localizableString -> Task<Bool, Never>? in
+                let isSource = catalog.sourceLanguage == localizableString.targetLanguage
+                if localizableString.state == .translated || isSource {
+                    return nil
                 }
-                continue
-            }
-            
-            let numberOfRetries = 1
-            var failedAttempts = 0
-            while failedAttempts <= numberOfRetries {
-                do {
-                    let translatedString = try await service.translate(
+                return Task {
+                    await semaphore.wait()
+                    let translation = await translate(
                         localizableString.sourceValue,
-                        to: targetLanguage,
-                        comment: localizableStringGroup.comment
+                        to: localizableString.targetLanguage,
+                        comment: group.comment
                     )
-                    localizableString.setTranslation(translatedString)
-                    if setNeedsReviewAfterTranslating {
-                        localizableString.setNeedsReview()
-                    }
+                    semaphore.signal()
 
-                    if verbose {
-                        logTranslationResult(to: targetLanguage, result: translatedString.truncatedRemovingNewlines(to: 64), isSource: isSource)
+                    if let translation {
+                        do {
+                            try await MainActor.run {
+                                localizableString.setTranslation(translation)
+                                if setNeedsReviewAfterTranslating {
+                                    localizableString.setNeedsReview()
+                                }
+
+                                if let fileURL {
+                                    try catalog.write(to: fileURL)
+                                }
+                            }
+                        } catch {
+                            Log.error("Failed to save string catalog: \(error)")
+                        }
+                        return true
                     }
-                    translatedStringsCount += 1
-                    break
-                } catch {
-                    failedAttempts += 1
-                    let result: String
-                    if failedAttempts <= numberOfRetries {
-                        result = "[Error: \(error.localizedDescription)] (retrying)".red
-                    } else {
-                        result = "[Error: \(error.localizedDescription)]".red
-                    }
-                    logTranslationResult(to: targetLanguage, result: result, isSource: isSource)
+                    return false
                 }
             }
+        }
+    }
 
-            if translatedStringsCount % 5 == 0 {
-                try catalog.write(to: fileURL)
+    private func translate(
+        _ sourceValue: String,
+        to targetLanguage: Language,
+        comment: String?
+    ) async -> String? {
+        let numberOfRetries = 1
+        var failedAttempts = 0
+        while failedAttempts <= numberOfRetries {
+            do {
+                let translatedString = try await service.translate(
+                    sourceValue,
+                    to: targetLanguage,
+                    comment: comment
+                )
+                if verbose {
+                    logTranslationResult(sourceValue, to: targetLanguage, translation: translatedString, comment: comment)
+                }
+                return translatedString
+            } catch {
+                failedAttempts += 1
+                let message: String
+                if failedAttempts <= numberOfRetries {
+                    message = "[Error: \(error.localizedDescription)] (retrying)".red
+                } else {
+                    message = "[Error: \(error.localizedDescription)]".red
+                }
+                logError(language: targetLanguage, message: message)
             }
         }
+        return nil
     }
 
     // MARK: Utilities
@@ -149,11 +166,24 @@ struct StringCatalogTranslator: FileTranslator {
         }
     }
     
-    private func logTranslationResult(to language: Language, result: String, isSource: Bool) {
+    private func logTranslationResult(_ source: String, to language: Language, translation: String, comment: String?) {
         Log.structured(
-            level: isSource ? .unimportant : .info,
+            .init("Translated:"),
+            .init("\"\(source.truncatedRemovingNewlines(to: 64))\""),
+            .init("[Comment: \(comment?.truncatedRemovingNewlines(to: 64) ?? "n/a")]".dim)
+        )
+        Log.structured(
+            level: .info,
             .init(width: 8, language.rawValue + ":"),
-            .init(result)
+            .init("\"\(translation.truncatedRemovingNewlines(to: 64))\"")
         )
     }
+
+    private func logError(language: Language, message: String) {
+        Log.structured(
+            .init(width: 6, language.rawValue),
+            .init(message.red)
+        )
+    }
+
 }
