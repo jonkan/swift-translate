@@ -100,22 +100,34 @@ struct StringCatalogEvaluator {
                 Log.info(newline: verbose ? .before : .none, "Evaluating key `\(key.truncatedRemovingNewlines(to: 64))` " + "[Comment: \(localizableStringGroup.comment ?? "n/a")]".dim)
             }
 
-            do {
-                let result = try await service.evaluateQuality(
-                    localizableString.sourceValue,
-                    translation: translation,
-                    in: language,
-                    comment: localizableStringGroup.comment
-                )
-                if verbose {
-                    logResult(result, translation: translation, in: language)
+            let numberOfRetries = 1
+            var failedAttempts = 0
+            while failedAttempts <= numberOfRetries {
+                do {
+                    let result = try await service.evaluateQuality(
+                        localizableString.sourceValue,
+                        translation: translation,
+                        in: language,
+                        comment: localizableStringGroup.comment
+                    )
+                    if verbose {
+                        logResult(result, translation: translation, in: language)
+                    }
+                    if result.quality == .good {
+                        localizableString.setTranslated()
+                    }
+                    reviewedStringsCount += 1
+                    break
+                } catch {
+                    failedAttempts += 1
+                    let message: String
+                    if failedAttempts <= numberOfRetries {
+                        message = "[Error: \(error.localizedDescription)] (retrying)"
+                    } else {
+                        message = "[Error: \(error.localizedDescription)]"
+                    }
+                    logError(language: language, message: message)
                 }
-                if result.quality == .good {
-                    localizableString.setTranslated()
-                }
-                reviewedStringsCount += 1
-            } catch {
-                logError(language: language, error: error)
             }
 
             if let fileURL, reviewedStringsCount % 5 == 0 {
@@ -141,10 +153,10 @@ struct StringCatalogEvaluator {
         }
     }
 
-    private func logError(language: Language, error: Error) {
+    private func logError(language: Language, message: String) {
         Log.structured(
             .init(width: 6, language.rawValue),
-            .init("[Error: \(error.localizedDescription)]".red)
+            .init(message.red)
         )
     }
 
