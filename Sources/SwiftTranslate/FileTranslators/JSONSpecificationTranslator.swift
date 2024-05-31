@@ -8,6 +8,7 @@
 import Foundation
 import struct SwiftStringCatalog.Language
 
+@MainActor
 struct JSONSpecificationTranslator: FileTranslator {
 
     // MARK: Internal
@@ -41,32 +42,43 @@ struct JSONSpecificationTranslator: FileTranslator {
         let specDirectoryURL = specFileURL.deletingLastPathComponent()
         try verify(spec, at: specDirectoryURL)
 
-        for file in spec.files {
-            let sourceFileURL = fileURL(file.sourceFileURL, relativeTo: specDirectoryURL)
-            let fileContents = try String(contentsOf: sourceFileURL, encoding: .utf8)
-            Log.info(newline: verbose ? .before : .none, "Translating file \(sourceFileURL.lastPathComponent), locale: \(file.sourceLocale.identifier), contents `\(fileContents.truncatedRemovingNewlines(to: 64))` " + "[Comment: \(file.comment ?? "n/a")]".dim)
+        guard let sourceLanguageCode = spec.sourceLocale.locale.language.languageCode?.identifier else {
+            throw SwiftTranslateError.failedToParseLocale("Missing languageCode for locale \(spec.sourceLocale.locale.identifier)")
+        }
+        let sourceLanguage = Language(sourceLanguageCode)
 
-            for output in file.outputs {
-                let outputFileURL = fileURL(output.fileURL, relativeTo: specDirectoryURL)
+        for file in spec.files {
+            let sourceFileURL = fileURL(file.fileURL, with: spec.sourceLocale.folderName, relativeTo: specDirectoryURL)
+            let fileContents = try String(contentsOf: sourceFileURL, encoding: .utf8)
+            Log.info(newline: verbose ? .before : .none, "Translating file \(sourceFileURL.lastPathComponent), locale: \(spec.sourceLocale.locale.identifier), contents `\(fileContents.truncatedRemovingNewlines(to: 64))` ")
+
+            for locale in spec.locales {
+                let outputFileURL = fileURL(file.fileURL, with: locale.folderName, relativeTo: specDirectoryURL)
                 guard !fileExists(outputFileURL) || overwrite else {
-                    Log.info(newline: verbose ? .before : .none, "Skipping \(output.locale.identifier) [Already translated]".dim)
+                    Log.info(newline: verbose ? .before : .none, "Skipping \(locale.locale.identifier) [Already translated]".dim)
                     continue
                 }
-
-                guard let targetLanguageCode = output.locale.language.languageCode?.identifier else {
-                    throw SwiftTranslateError.failedToParseLocale("Missing languageCode for locale \(output.locale.identifier)")
+                guard let targetLanguageCode = locale.locale.language.languageCode?.identifier else {
+                    throw SwiftTranslateError.failedToParseLocale("Missing languageCode for locale \(locale.locale.identifier)")
                 }
                 let targetLanguage = Language(targetLanguageCode)
-                let translatedString = try await service.translate(
-                    fileContents,
-                    to: targetLanguage,
-                    comment: file.comment
-                )
+                let translatedString: String
+                if file.skipTranslation {
+                    translatedString = fileContents
+                } else {
+                    translatedString = try await service.translate(
+                        fileContents,
+                        in: sourceLanguage,
+                        to: targetLanguage,
+                        comment: file.comment
+                    )
+                }
 
                 // Write the output file
                 guard let outputData = translatedString.data(using: .utf8) else {
                     throw SwiftTranslateError.failedToSaveTranslation("Failed to convert translated string to UTF-8")
                 }
+
                 try FileManager.default.createDirectory(
                     at: outputFileURL.deletingLastPathComponent(),
                     withIntermediateDirectories: true
@@ -74,7 +86,11 @@ struct JSONSpecificationTranslator: FileTranslator {
                 try outputData.write(to: outputFileURL)
 
                 if verbose {
-                    logTranslationResult(to: targetLanguage, result: translatedString.truncatedRemovingNewlines(to: 64))
+                    logTranslationResult(
+                        to: targetLanguage,
+                        result: translatedString.truncatedRemovingNewlines(to: 64),
+                        copiedWithoutTranslation: file.skipTranslation
+                    )
                 }
             }
         }
@@ -92,7 +108,7 @@ struct JSONSpecificationTranslator: FileTranslator {
 
     private func verify(_ spec: JSONSpecification, at specDirectoryURL: URL) throws {
         for file in spec.files {
-            let sourceFileURL = fileURL(file.sourceFileURL, relativeTo: specDirectoryURL)
+            let sourceFileURL = fileURL(file.fileURL, with: spec.sourceLocale.folderName, relativeTo: specDirectoryURL)
             guard fileExists(sourceFileURL) else {
                 throw SwiftTranslateError.fileNotFound(sourceFileURL)
             }
@@ -105,63 +121,75 @@ struct JSONSpecificationTranslator: FileTranslator {
         relativeURL.appending(path: fileURL.path)
     }
 
+    private func fileURL(_ fileURL: URL, with localeReplacement: String, relativeTo relativeURL: URL) -> URL {
+        let path = fileURL.path.replacingOccurrences(of: "{locale}", with: localeReplacement)
+        return relativeURL.appending(path: path)
+    }
+
     private func fileExists(_ fileURL: URL) -> Bool {
         FileManager.default.fileExists(atPath: fileURL.path)
     }
 
-    private func logTranslationResult(to language: Language, result: String) {
+    private func logTranslationResult(to language: Language, result: String, copiedWithoutTranslation copied: Bool) {
         Log.structured(
             level: .info,
             .init(width: 8, language.rawValue + ":"),
-            .init(result)
+            .init(result),
+            .init(copied ? "[Copied without translation]".dim : "")
         )
     }
 }
 
-
-
 struct JSONSpecification: Codable {
-
-    /// Each entry represents a file to translate
+    /// The locale of the source file, i.e. which language to translate from.
+    let sourceLocale: FileLocale
+    /// A comment to pass to the translation service. Optional.
+    let comment: String?
+    /// Locales to translate each file to.
+    let locales: [FileLocale]
+    /// One or more file specifications i.e. files to translate.
     let files: [FileSpecification]
 
-    struct FileSpecification: Codable {
-        /// The locale of the source file, i.e. which language to translate from.
-        let sourceLocale: Locale
-        /// File URL to the source file, relative to where the json specification is located.
-        let sourceFileURL: URL
-        /// A comment to pass to the translation service (Optional).
-        let comment: String?
-        /// One or more outputs, i.e. languages to translate to.
-        let outputs: [Output]
-
-        struct Output: Codable {
-            let locale: Locale
-            let fileURL: URL
-            /// Set this to `true` if you  want the file to be copied without being translated. (Optional)
-            let skipTranslation: Bool
-        }
+    struct FileLocale: Codable {
+        /// The locale to translate the file to.
+        let locale: Locale
+        /// Name of the folder where the file of this locale. Optional, defaults to the locale.
+        let folderName: String
     }
 
+    struct FileSpecification: Codable {
+        let fileURL: URL
+        /// A comment to pass to the translation service. Optional.
+        let comment: String?
+        /// Set this to `true` if you just want the file to be copied without being translated. Optional, defaults to `false`.
+        let skipTranslation: Bool
+    }
+}
+
+extension JSONSpecification {
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sourceLocale = try container.decode(FileLocale.self, forKey: .sourceLocale)
+        comment = try container.decodeIfPresent(String.self, forKey: .comment)
+        locales = try container.decode([FileLocale].self, forKey: .locales)
+        files = try container.decode([FileSpecification].self, forKey: .files)
+    }
 }
 
 extension JSONSpecification.FileSpecification {
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let localeIdentifier = try container.decode(String.self, forKey: .sourceLocale)
-        sourceLocale = Locale(identifier: localeIdentifier)
-        sourceFileURL = try container.decode(URL.self, forKey: .sourceFileURL)
+        fileURL = try container.decode(URL.self, forKey: .fileURL)
         comment = try container.decodeIfPresent(String.self, forKey: .comment)
-        outputs = try container.decode([Output].self, forKey: .outputs)
+        skipTranslation = try container.decodeIfPresent(Bool.self, forKey: .skipTranslation) ?? false
     }
 }
 
-extension JSONSpecification.FileSpecification.Output {
+extension JSONSpecification.FileLocale {
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let localeIdentifier = try container.decode(String.self, forKey: .locale)
         locale = Locale(identifier: localeIdentifier)
-        fileURL = try container.decode(URL.self, forKey: .fileURL)
-        skipTranslation = try container.decodeIfPresent(Bool.self, forKey: .skipTranslation) ?? false
+        folderName = try container.decodeIfPresent(String.self, forKey: .folderName) ?? localeIdentifier
     }
 }

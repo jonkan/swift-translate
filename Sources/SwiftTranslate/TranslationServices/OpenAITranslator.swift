@@ -26,14 +26,19 @@ struct OpenAITranslator {
     
     // MARK: Helpers
 
-    private func chatQuery(for inputText: String, targetLanguage: Language, comment: String?) -> ChatQuery {
+    private func chatQuery(
+        for inputText: String,
+        in sourceLanguage: Language,
+        targetLanguage: Language,
+        comment: String?
+    ) -> ChatQuery {
         let systemPrompt = """
             You are a helpful assistant designed to output JSON.
             """
 
         var userPrompt =
             """
-            Translate the source text within the 6 backticks (``````) into the language with ISO 639-1 code: \(targetLanguage.rawValue).
+            Translate the source text within the 6 backticks (``````) from the source language with ISO 639-1 code: \(sourceLanguage.code) into the target language with ISO 639-1 code: \(targetLanguage.code).
 
             Instructions:
             - Read the source text exactly as it appears wihtin the 6 backticks (``````).
@@ -52,7 +57,7 @@ struct OpenAITranslator {
         }
         userPrompt += """
             
-            Source (English): ``````\(inputText)``````
+            Source (language: \(sourceLanguage.code)): ``````\(inputText)``````
             """
 
         return ChatQuery(
@@ -73,13 +78,13 @@ extension OpenAITranslator: TranslationService {
     
     // MARK: Translate
     
-    func translate(_ string: String, to targetLanguage: Language, comment: String?) async throws -> String {
+    func translate(_ string: String, in sourceLanguage: Language, to targetLanguage: Language, comment: String?) async throws -> String {
         guard string.rangeOfCharacter(from: .letters) != nil else {
             return string
         }
 
         let result = try await openAI.chats(
-            query: chatQuery(for: string, targetLanguage: targetLanguage, comment: comment)
+            query: chatQuery(for: string, in: sourceLanguage, targetLanguage: targetLanguage, comment: comment)
         )
 
         // Extract the function call

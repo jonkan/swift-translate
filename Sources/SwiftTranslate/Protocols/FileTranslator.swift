@@ -6,6 +6,7 @@ import Foundation
 import SwiftStringCatalog
 
 
+@MainActor
 protocol FileTranslator {
     var service: TranslationService { get }
     var targetLanguages: Set<Language>? { get }

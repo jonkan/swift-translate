@@ -60,7 +60,7 @@ struct ActionCoordinator {
             )
         case .translateText(let string, let targetLanguages):
             logPrefix = "Translated"
-            try await translate(string, to: targetLanguages)
+            try await translate(string, in: .english, to: targetLanguages)
         case .reviewFileOrDirectory(let url, let languages, let overwrite):
             logPrefix = "Reviewed"
             keysCount = try await reviewFiles(at: url, languages: languages, overwrite: overwrite)
@@ -76,10 +76,10 @@ struct ActionCoordinator {
     
     // MARK: Translate Text
     
-    private func translate(_ string: String, to targetLanguages: Set<Language>) async throws {
+    private func translate(_ string: String, in sourceLanguage: Language, to targetLanguages: Set<Language>) async throws {
         Log.info(newline: .before, "Translating `", string, "`:")
         for language in targetLanguages {
-            let translation = try await translator.translate(string, to: language, comment: nil)
+            let translation = try await translator.translate(string, in: sourceLanguage, to: language, comment: nil)
             Log.structured(
                 .init(width: 8, language.rawValue + ":"),
                 .init(translation)
@@ -102,7 +102,7 @@ struct ActionCoordinator {
             return 0
         }
         
-        let fileTranslator = fileFinder.type.translatorType.init(
+        let fileTranslator = await fileFinder.type.translatorType.init(
             with: translator,
             targetLanguages: targetLanguages,
             overwrite: overwrite,

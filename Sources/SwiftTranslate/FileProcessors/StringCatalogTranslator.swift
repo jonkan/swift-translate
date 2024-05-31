@@ -135,6 +135,7 @@ struct StringCatalogTranslator: FileTranslator {
             do {
                 let translatedString = try await service.translate(
                     sourceValue,
+                    in: sourceLanguage,
                     to: targetLanguage,
                     comment: comment
                 )

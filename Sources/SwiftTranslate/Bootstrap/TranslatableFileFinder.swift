@@ -38,10 +38,14 @@ struct TranslatableFileFinder {
 
     init(fileOrDirectoryURL: URL) throws {
         self.fileOrDirectoryURL = fileOrDirectoryURL
-        guard let type = FileType(rawValue: fileOrDirectoryURL.pathExtension) else {
-            throw SwiftTranslateError.unhandledFileType
+        if fileOrDirectoryURL.pathExtension == "" {
+            self.type = .stringCatalog
+        } else {
+            guard let type = FileType(rawValue: fileOrDirectoryURL.pathExtension) else {
+                throw SwiftTranslateError.unhandledFileType
+            }
+            self.type = type
         }
-        self.type = type
     }
     
     // MARK: Main

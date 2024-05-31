@@ -7,5 +7,5 @@ import SwiftStringCatalog
 
 
 public protocol TranslationService {
-    func translate(_ string: String, to targetLanguage: Language, comment: String?) async throws -> String
+    func translate(_ string: String, in sourcLanguage: Language, to targetLanguage: Language, comment: String?) async throws -> String
 }
