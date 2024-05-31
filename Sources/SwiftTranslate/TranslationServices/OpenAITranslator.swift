@@ -135,10 +135,6 @@ private let translateFunction = ChatQuery.ChatCompletionToolParam.FunctionDefini
     parameters: .init(
         type: .object,
         properties: [
-            "source": .init(
-                type: .string,
-                description: "The text to be translated."
-            ),
             "sourceLanguageCode": .init(
                 type: .string,
                 description: "The ISO 639-1 language code of the source text (e.g., 'en' for English)."
@@ -162,7 +158,6 @@ private let translateFunction = ChatQuery.ChatCompletionToolParam.FunctionDefini
 )
 
 private struct TranslationFunctionResponse: Codable {
-    let source: String
     let sourceLanguageCode: String
     let targetLanguageCode: String
     let translation: String
