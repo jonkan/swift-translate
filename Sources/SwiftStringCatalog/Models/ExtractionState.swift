@@ -10,4 +10,5 @@ public enum ExtractionState: String, Codable {
     case manual
     case migrated
     case unknown
+    case stale
 }
