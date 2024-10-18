@@ -60,14 +60,20 @@ struct JSONSpecificationTranslator: FileTranslator {
             Log.info(newline: verbose ? .before : .none, "Translating file \(sourceFileURL.lastPathComponent), locale: \(spec.sourceLocale.locale.identifier), contents `\(fileContents.truncatedRemovingNewlines(to: 64))` ")
 
             for locale in spec.locales {
+                guard let targetLanguageCode = locale.locale.language.languageCode?.identifier else {
+                    throw SwiftTranslateError.failedToParseLocale("Missing languageCode for locale \(locale.locale.identifier)")
+                }
+                // Skip if not included in the targetLanguages
+                if let targetLanguages, !targetLanguages.contains(where: { $0.code == targetLanguageCode }) {
+                    continue
+                }
+
                 let outputFileURL = fileURL(file.fileURL, with: locale.folderName, relativeTo: specDirectoryURL)
                 guard !fileExists(outputFileURL) || overwrite else {
                     Log.info(newline: verbose ? .before : .none, "Skipping \(locale.locale.identifier) [Already translated]".dim)
                     continue
                 }
-                guard let targetLanguageCode = locale.locale.language.languageCode?.identifier else {
-                    throw SwiftTranslateError.failedToParseLocale("Missing languageCode for locale \(locale.locale.identifier)")
-                }
+
                 let targetLanguage = Language(targetLanguageCode)
                 let translatedString: String
                 if file.skipTranslation {
