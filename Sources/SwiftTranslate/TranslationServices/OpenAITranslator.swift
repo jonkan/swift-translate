@@ -50,7 +50,7 @@ struct OpenAITranslator {
             - Any leading or trailing whitespace in the source must be preserved in the translation.
             """
 
-        if let comment {
+        if let comment, !comment.isEmpty {
             userPrompt += """
                 - Take into account the following context when translating: \(comment)
                 """

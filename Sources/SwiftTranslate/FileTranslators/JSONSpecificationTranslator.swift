@@ -77,7 +77,7 @@ struct JSONSpecificationTranslator: FileTranslator {
                         fileContents,
                         in: sourceLanguage,
                         to: targetLanguage,
-                        comment: [spec.comment, file.comment].compactMap(\.self).joined(separator: "\n")
+                        comment: [spec.comment, file.comment].compactMap(\.self).joined(separator: " ")
                     )
                 }
 
