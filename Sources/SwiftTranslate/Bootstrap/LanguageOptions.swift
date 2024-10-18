@@ -24,10 +24,6 @@ func getTargetLanguages(from languages: [Language]) throws -> Set<Language>? {
             throw ValidationError("Invalid language(s) provided: \(invalidLanguages.map(\.rawValue).joined(separator: ", "))")
         }
 
-        var languages = languages
-        if !languages.contains(.english) {
-            languages.append(.english)
-        }
         return Set(languages)
     }
 }
