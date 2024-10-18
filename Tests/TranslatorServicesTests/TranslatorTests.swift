@@ -55,7 +55,7 @@ class TranslatorTests: XCTestCase {
     // MARK: - Helpers
 
     private func translate(_ string: String, to language: Language, comment: String? = nil) async throws -> String {
-        try await service.translate(string, to: language, comment: comment)
+        try await service.translate(string, in: .english, to: language, comment: comment)
     }
 
     private func apiKey() throws -> String {
