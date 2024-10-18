@@ -17,6 +17,7 @@ protocol FileTranslator {
     init(
         with translator: TranslationService,
         targetLanguages: Set<Language>?,
+        onlyFiles: [String],
         overwrite: Bool,
         skipConfirmations: Bool,
         setNeedsReviewAfterTranslating: Bool,

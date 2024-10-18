@@ -48,6 +48,13 @@ struct TranslateCommand: AsyncParsableCommand {
     )
     private var languages: [Language] = [Language("__in_catalog")]
 
+    @Option(
+        name: [.customLong("only-files")],
+        parsing: .upToNextOption,
+        help: "Only translate the specified files in the JSON specification. Not applicable when translating string catalogs."
+    )
+    private var onlyFiles: [String] = []
+
     @Flag(
         name: [.customLong("skip-confirmation"), .customShort("y")],
         help: "Skips confirmation for translating large string files"
@@ -80,8 +87,9 @@ struct TranslateCommand: AsyncParsableCommand {
             action = .translateText(text, targetLanguages)
         } else if let fileOrDirectory = catalogOptions.fileOrDirectory.first {
             action = .translateFileOrDirectory(
-                URL(fileURLWithPath: fileOrDirectory),
-                targetLanguages,
+                fileOrDirectoryUrl: URL(fileURLWithPath: fileOrDirectory),
+                targetLanguages: targetLanguages,
+                onlyFiles: onlyFiles,
                 overwrite: catalogOptions.overwriteExisting,
                 setNeedsReviewAfterTranslating: catalogOptions.setNeedsReviewAfterTranslating
             )

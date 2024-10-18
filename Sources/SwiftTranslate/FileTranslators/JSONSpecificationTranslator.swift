@@ -16,6 +16,7 @@ struct JSONSpecificationTranslator: FileTranslator {
     let overwrite: Bool
     let skipConfirmations: Bool
     let targetLanguages: Set<Language>?
+    let onlyFiles: [String]
     let service: TranslationService
     let verbose: Bool
 
@@ -24,6 +25,7 @@ struct JSONSpecificationTranslator: FileTranslator {
     init(
         with translator: any TranslationService,
         targetLanguages: Set<Language>?,
+        onlyFiles: [String],
         overwrite: Bool,
         skipConfirmations: Bool,
         setNeedsReviewAfterTranslating: Bool,
@@ -31,8 +33,9 @@ struct JSONSpecificationTranslator: FileTranslator {
         numberOfConcurrentTasks: Int
     ) {
         self.skipConfirmations = skipConfirmations
-        self.overwrite = overwrite
         self.targetLanguages = targetLanguages
+        self.onlyFiles = onlyFiles
+        self.overwrite = overwrite
         self.service = translator
         self.verbose = verbose
     }
@@ -48,6 +51,10 @@ struct JSONSpecificationTranslator: FileTranslator {
         let sourceLanguage = Language(sourceLanguageCode)
 
         for file in spec.files {
+            if !onlyFiles.isEmpty && !onlyFiles.contains(file.fileURL.lastPathComponent) {
+                continue
+            }
+
             let sourceFileURL = fileURL(file.fileURL, with: spec.sourceLocale.folderName, relativeTo: specDirectoryURL)
             let fileContents = try String(contentsOf: sourceFileURL, encoding: .utf8)
             Log.info(newline: verbose ? .before : .none, "Translating file \(sourceFileURL.lastPathComponent), locale: \(spec.sourceLocale.locale.identifier), contents `\(fileContents.truncatedRemovingNewlines(to: 64))` ")
@@ -70,7 +77,7 @@ struct JSONSpecificationTranslator: FileTranslator {
                         fileContents,
                         in: sourceLanguage,
                         to: targetLanguage,
-                        comment: file.comment
+                        comment: [spec.comment, file.comment].compactMap(\.self).joined(separator: "\n")
                     )
                 }
 

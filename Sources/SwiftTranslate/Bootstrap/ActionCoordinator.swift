@@ -14,8 +14,9 @@ struct ActionCoordinator {
     
     enum Action {
         case translateFileOrDirectory(
-            URL,
-            Set<Language>?,
+            fileOrDirectoryUrl: URL,
+            targetLanguages: Set<Language>?,
+            onlyFiles: [String],
             overwrite: Bool,
             setNeedsReviewAfterTranslating: Bool
         )
@@ -50,13 +51,20 @@ struct ActionCoordinator {
         let logPrefix: String
 
         switch action {
-        case .translateFileOrDirectory(let fileOrDirectoryUrl, let targetLanguages, let overwrite, let setNeedsReviewAfterTranslating):
+        case .translateFileOrDirectory(
+            let fileOrDirectoryUrl,
+            let targetLanguages,
+            let onlyFiles,
+            let overwrite,
+            let setNeedsReviewAfterTranslating
+        ):
             logPrefix = "Translated"
             keysCount = try await translateFiles(
                 at: fileOrDirectoryUrl,
                 to: targetLanguages,
                 overwrite: overwrite,
-                setNeedsReviewAfterTranslating: setNeedsReviewAfterTranslating
+                setNeedsReviewAfterTranslating: setNeedsReviewAfterTranslating,
+                onlyFiles: onlyFiles
             )
         case .translateText(let string, let targetLanguages):
             logPrefix = "Translated"
@@ -93,7 +101,8 @@ struct ActionCoordinator {
         at url: URL,
         to targetLanguages: Set<Language>?,
         overwrite: Bool,
-        setNeedsReviewAfterTranslating: Bool
+        setNeedsReviewAfterTranslating: Bool,
+        onlyFiles: [String]
     ) async throws -> Int {
         let fileFinder = try TranslatableFileFinder(fileOrDirectoryURL: url)
         let translatableFiles = try fileFinder.findTranslatableFiles()
@@ -105,13 +114,14 @@ struct ActionCoordinator {
         let fileTranslator = await fileFinder.type.translatorType.init(
             with: translator,
             targetLanguages: targetLanguages,
+            onlyFiles: onlyFiles,
             overwrite: overwrite,
             skipConfirmations: skipConfirmation,
             setNeedsReviewAfterTranslating: setNeedsReviewAfterTranslating,
             verbose: verbose,
             numberOfConcurrentTasks: 10
         )
-        
+
         var translatedKeys = 0
         for file in translatableFiles {
             translatedKeys += try await fileTranslator.translate(fileAt: file)
